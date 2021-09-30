@@ -1,0 +1,3 @@
+debug_mode: true
+max_search_distance: 16
+database_drive: "h2"

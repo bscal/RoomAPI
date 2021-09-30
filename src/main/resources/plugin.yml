@@ -1,0 +1,6 @@
+name: Roomapi
+version: '${version}'
+main: me.bscal.roomapi.RoomAPI
+api-version: 1.17
+libraries:
+  - "net.axay:kspigot:1.17.4"
