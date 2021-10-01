@@ -5,7 +5,6 @@ import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.entity.Player
@@ -14,98 +13,87 @@ import java.util.logging.Level
 
 private const val Distance = 16 * 16
 
-private val NORTH = Vector(1, 0, 0)
-private val SOUTH = Vector(-1, 0, 0)
-private val UP = Vector(0, 1, 0)
-private val DOWN = Vector(0, -1, 0)
-private val EAST = Vector(0, 0, 1)
-private val WEST = Vector(0, 0, -1)
+val NORTH = Vector(1, 0, 0)
+val SOUTH = Vector(-1, 0, 0)
+val UP = Vector(0, 1, 0)
+val DOWN = Vector(0, -1, 0)
+val EAST = Vector(0, 0, 1)
+val WEST = Vector(0, 0, -1)
 
-// Used for debugging the amount of blocks processed
-private var Counter: Int = 0
-private val Visited: ObjectOpenHashSet<Vector> = ObjectOpenHashSet()
-private val Stack: ObjectArrayList<Vector> = ObjectArrayList()
-private val RoomBlocks: ObjectArrayList<Location> = ObjectArrayList()
+@JvmRecord data class FloodFillReturnData(val isRoom: Boolean, val blocksProcessed: Int, val blocks: ObjectArrayList<Location>)
 
-private fun FillVector(location: Location): Boolean
+fun TestWallConnects(player: Player)
 {
-	var isRoom = true
+	val scope = CoroutineScope(Dispatchers.Default)
+	val job = scope.launch {
+		val scopedLocation = player.location.clone()
+		if (DoesLocationExist(scopedLocation))
+		{
+			RoomAPI.Log(Level.WARNING, "This room seems to already exist!")
+			return@launch
+		}
+		val started = System.nanoTime()
+		val fillReturnData: FloodFillReturnData = FillVector(scopedLocation)
+		if (fillReturnData.isRoom)
+		{
+			val roomId = CreateRoom(scopedLocation.world, player.uniqueId)
+			CreateBlockBatch(roomId, fillReturnData.blocks)
+			RoomAPI.Log(Level.INFO, "RoomId=$roomId")
+		}
 
+		val diff = System.nanoTime() - started
+		RoomAPI.Log(Level.INFO,
+			"FloodFill took: ${diff}ns (${diff / 1000000}ms), Processed ${fillReturnData.blocksProcessed} blocks. Is Room: ${fillReturnData.isRoom}")
+
+	}
+}
+
+private fun AddVecsToNew(src: Vector, add: Vector): Vector = Vector(src.x + add.x, src.y + add.y, src.z + add.z)
+
+private fun FillVector(location: Location): FloodFillReturnData
+{
 	val origin: Vector = location.toVector()
-	if (!Visited.contains(origin)) Stack.push(origin)
-	while (!Stack.isEmpty)
+	val visited: ObjectOpenHashSet<Vector> = ObjectOpenHashSet()
+	val stack: ObjectArrayList<Vector> = ObjectArrayList()
+	val roomBlocks: ObjectArrayList<Location> = ObjectArrayList()
+	var isRoom = true
+	var counter = 0
+
+	if (!visited.contains(origin)) stack.push(origin)
+	while (!stack.isEmpty)
 	{
-		val vec = Stack.pop()
+		val vec = stack.pop()
 		location.set(vec.x, vec.y, vec.z)
-		Visited.add(vec)
-		Counter++
+		visited.add(vec)
+		counter++
 		if (origin.distanceSquared(vec) > Distance)
 		{
 			isRoom = false
 			continue
 		}
 		else if (location.block.type == Material.AIR) // Do logic here
-			RoomBlocks.add(location.clone())
+			roomBlocks.add(location.clone())
 		else continue
 
 		val v0 = AddVecsToNew(vec, NORTH)
-		if (!Visited.contains(v0)) Stack.push(v0)
+		if (!visited.contains(v0)) stack.push(v0)
 
 		val v1 = AddVecsToNew(vec, SOUTH)
-		if (!Visited.contains(v1)) Stack.push(v1)
+		if (!visited.contains(v1)) stack.push(v1)
 
 		val v2 = AddVecsToNew(vec, EAST)
-		if (!Visited.contains(v2)) Stack.push(v2)
+		if (!visited.contains(v2)) stack.push(v2)
 
 		val v3 = AddVecsToNew(vec, WEST)
-		if (!Visited.contains(v3)) Stack.push(v3)
+		if (!visited.contains(v3)) stack.push(v3)
 
 		val v4 = AddVecsToNew(vec, UP)
-		if (!Visited.contains(v4)) Stack.push(v4)
+		if (!visited.contains(v4)) stack.push(v4)
 
 		val v5 = AddVecsToNew(vec, DOWN)
-		if (!Visited.contains(v5)) Stack.push(v5)
+		if (!visited.contains(v5)) stack.push(v5)
 	}
-
-	if (isRoom)
-	{
-		Bukkit.getLogger().info("This is a room!")
-	}
-
-	Visited.clear()
-	Visited.trim()
-	Stack.clear()
-	Stack.trim()
-
-	return isRoom
-}
-
-private fun AddVecsToNew(src: Vector, add: Vector): Vector = Vector(src.x + add.x, src.y + add.y, src.z + add.z)
-
-fun TestWallConnects(player: Player)
-{
-	val scope = CoroutineScope(Dispatchers.Default)
-	val job = scope.launch {
-		val scopedLocation = player.location
-		val started = System.nanoTime()
-		Counter = 1
-		val isRoom = FillVector(scopedLocation.clone())
-		val diff = System.nanoTime() - started
-		Bukkit.getLogger().info("FloodFillVec took: ${diff}ns (${diff / 1000000}ms), Processed $Counter blocks")
-
-		RoomAPI.Log(Level.INFO, "Was room? $isRoom")
-		if (isRoom)
-		{
-			val roomId = CreateRoom(scopedLocation.world, player.uniqueId)
-			RoomAPI.Log(Level.INFO, "RoomId=$roomId")
-		}
-	}
-	job.invokeOnCompletion {
-		RoomBlocks.clear()
-		RoomBlocks.trim()
-	}
-
-	Bukkit.getLogger().info("end of fun " + job.isCompleted)
+	return FloodFillReturnData(isRoom, counter, roomBlocks)
 }
 
 // My first implementation of floodfill I tried to optimize with the newer version.

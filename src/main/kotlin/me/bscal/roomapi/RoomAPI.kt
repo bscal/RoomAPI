@@ -2,6 +2,7 @@ package me.bscal.roomapi
 
 import net.axay.kspigot.commands.command
 import net.axay.kspigot.commands.runs
+import net.axay.kspigot.extensions.pluginManager
 import net.axay.kspigot.main.KSpigot
 import java.util.logging.Level
 
@@ -30,6 +31,8 @@ class RoomAPI : KSpigot()
 
 		CreateTables()
 
+		pluginManager.registerEvents(RoomListeners(), this)
+
 		command("floodfill") {
 			runs {
 				TestWallConnects(player)
@@ -40,7 +43,7 @@ class RoomAPI : KSpigot()
 
 	override fun shutdown()
 	{
-
+		DataSource.close()
 	}
 
 }

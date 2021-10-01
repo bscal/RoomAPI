@@ -2,9 +2,14 @@ package me.bscal.roomapi
 
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
+import it.unimi.dsi.fastutil.ints.IntArrayList
+import it.unimi.dsi.fastutil.objects.ObjectArrayList
 import org.bukkit.Location
 import org.bukkit.World
+import org.bukkit.util.Vector
+import java.sql.Connection
 import java.sql.PreparedStatement
+import java.sql.SQLException
 import java.sql.Statement
 import java.util.*
 
@@ -13,98 +18,273 @@ private val Config: HikariConfig = HikariConfig()
 val DataSource: HikariDataSource by lazy {
 	Class.forName("org.h2.Driver")
 	Config.jdbcUrl = "jdbc:h2:${RoomAPI.INSTANCE.dataFolder.absolutePath}\\roomapi"
+	Config.maximumPoolSize = 10
+	Config.connectionTimeout = 60000
+	Config.leakDetectionThreshold = 60000
 	HikariDataSource(Config)
 }
 
 fun CreateTables()
-{
-	// Create rooms
+{    // Create rooms
 	val sql = """
 		CREATE TABLE IF NOT EXISTS rooms (
-		room_id              integer   NOT NULL AUTO_INCREMENT,
-		world                uuid(32)   NOT NULL,
+		room_id              integer   AUTO_INCREMENT,
+		world                varchar(64)   NOT NULL,
 		owner                uuid(32)   NOT NULL,
 		CONSTRAINT pk_rooms_room_id PRIMARY KEY ( room_id ));
 	""".trimIndent()
-	DataSource.connection.createStatement().execute(sql)
+	var conn: Connection? = null
+	var stmt: Statement? = null
+	try
+	{
+		conn = DataSource.connection
+		stmt = conn.createStatement()
+		stmt.execute(sql)
+		stmt.close()
+		conn.close()
+	}
+	catch (e: SQLException)
+	{
+		System.err.println(e.stackTrace)
+	}
+	stmt?.close()
+	conn?.close()
 
 	// Create blocks
 	val sql2 = """
+		SET FOREIGN_KEY_CHECKS = 0;
 		CREATE TABLE IF NOT EXISTS blocks ( 
-			id                   bigint   NOT NULL,
+			id                   bigint   AUTO_INCREMENT,
 			room_id              integer   NOT NULL,
-			world                uuid(32)   NOT NULL,
+			world                varchar(64)   NOT NULL,
 			x                    integer   NOT NULL,
 			y                    integer   NOT NULL,
 			z                    integer   NOT NULL,
-			CONSTRAINT pk_blocks_id PRIMARY KEY ( id )
-		 );
-
-		ALTER TABLE "PUBLIC".blocks ADD CONSTRAINT fk_blocks_rooms FOREIGN KEY ( room_id ) REFERENCES "PUBLIC".rooms( room_id ) ON DELETE NO ACTION ON UPDATE NO ACTION;
+			CONSTRAINT pk_blocks_id PRIMARY KEY ( id ));
+		SET FOREIGN_KEY_CHECKS = 1;
 	""".trimIndent()
-	DataSource.connection.createStatement().execute(sql2)
+	var conn2: Connection? = null
+	var stmt2: Statement? = null
+	try
+	{
+		conn2 = DataSource.connection
+		stmt2 = conn2.createStatement()
+		stmt2.execute(sql2)
+		stmt2.close()
+		conn2.close()
+	}
+	catch (e: SQLException)
+	{
+		System.err.println(e.stackTrace)
+	}
+	stmt2?.close()
+	conn2?.close()
 }
 
-fun CreateRoom(world: World, owner: UUID) : Int
+fun CreateRoom(world: World, owner: UUID): Int
 {
 	var id = -1
-	val sql = "INSERT INTO rooms(world, owner) values(?,?)"
-	val stmt: PreparedStatement = DataSource.connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)
-	stmt.setString(1, world.name)
-	stmt.setString(2, owner.toString())
-	stmt.executeUpdate()
-	val rs = stmt.generatedKeys
-	if (rs.next()) id = rs.getInt(1)
-	stmt.close()
+	val sql = "INSERT INTO rooms (world, owner) values (?,?)"
+	var conn: Connection? = null
+	var stmt: PreparedStatement? = null
+	try
+	{
+		conn = DataSource.connection
+		stmt = conn.prepareStatement(sql)
+		stmt.setString(1, world.name)
+		stmt.setString(2, owner.toString())
+		stmt.executeUpdate()
+		val rs = stmt.generatedKeys
+		if (rs.next()) id = rs.getInt(1)
+	}
+	catch (e: SQLException)
+	{
+		System.err.println(e.stackTrace)
+	}
+	stmt?.close()
+	conn?.close()
 	return id
 }
 
 fun LoadRoom(room: Room)
 {
 	val sql = "SELECT * FROM rooms WHERE id=?"
-	val stmt: PreparedStatement = DataSource.connection.prepareStatement(sql)
-	stmt.setInt(1, room.RoomId)
-	val rs = stmt.executeQuery()
-	if (rs.next())
+	var conn: Connection? = null
+	var stmt: PreparedStatement? = null
+	try
 	{
+		conn = DataSource.connection
+		stmt = conn.prepareStatement(sql)
+		stmt.setInt(1, room.RoomId)
+		val rs = stmt.executeQuery()
+		if (rs.next())
+		{			//TODO
+		}
 	}
-	stmt.close()
+	catch (e: SQLException)
+	{
+		System.err.println(e.stackTrace)
+	}
+	stmt?.close()
+	conn?.close()
 }
 
 fun CreateBlock(roomId: Int, location: Location)
 {
-	val sql = "INSERT INTO blocks(world, x, y, z, roomId) values(?,?,?,?,?)"
-	val stmt: PreparedStatement = DataSource.connection.prepareStatement(sql)
-	stmt.setString(1, location.world.name)
-	stmt.setInt(2, location.blockX)
-	stmt.setInt(3, location.blockY)
-	stmt.setInt(4, location.blockZ)
-	stmt.setInt(5, roomId)
-	stmt.execute()
-	stmt.close()
+	val sql = "INSERT INTO blocks (world, x, y, z, room_id) values (?, ?, ?, ?, ?)"
+	var conn: Connection? = null
+	var stmt: PreparedStatement? = null
+	try
+	{
+		conn = DataSource.connection
+		stmt = conn.prepareStatement(sql)
+		stmt.setString(1, location.world.name)
+		stmt.setInt(2, location.blockX)
+		stmt.setInt(3, location.blockY)
+		stmt.setInt(4, location.blockZ)
+		stmt.setInt(5, roomId)
+		stmt.execute()
+	}
+	catch (e: SQLException)
+	{
+		System.err.println(e.stackTrace)
+	}
+	stmt?.close()
+	conn?.close()
 }
 
-fun LoadBlock(location: Location)
+fun CreateBlockBatch(roomId: Int, locations: ObjectArrayList<Location>)
 {
-	val sql = "SELECT roomId FROM blocks WHERE world=?,x=?,y=?,z=?"
-	val stmt: PreparedStatement = DataSource.connection.prepareStatement(sql)
-	stmt.setString(1, location.world.name)
-	stmt.setInt(2, location.blockX)
-	stmt.setInt(3, location.blockY)
-	stmt.setInt(4, location.blockZ)
-	val rs = stmt.executeQuery()
-	if (rs.next())
+	val sql = "INSERT INTO blocks (world, x, y, z, room_id) values (?, ?, ?, ?, ?)"
+	var conn: Connection? = null
+	var stmt: PreparedStatement? = null
+	try
 	{
+		conn = DataSource.connection
+		stmt = conn.prepareStatement(sql)
+		for (loc: Location in locations)
+		{
+			stmt.setString(1, loc.world.name)
+			stmt.setInt(2, loc.blockX)
+			stmt.setInt(3, loc.blockY)
+			stmt.setInt(4, loc.blockZ)
+			stmt.setInt(5, roomId)
+			stmt.addBatch()
+		}
+		stmt.executeBatch()
 	}
-	stmt.close()
+	catch (e: SQLException)
+	{
+		System.err.println(e.stackTrace)
+	}
+	stmt?.close()
+	conn?.close()
+}
+
+fun DoesLocationExist(locations: Location): Boolean
+{
+	var exists = false
+	val sql = "SELECT room_id FROM blocks WHERE world = ? AND x = ? AND y = ? AND z = ?;"
+
+	var conn: Connection? = null
+	var stmt: PreparedStatement? = null
+	try
+	{
+		conn = DataSource.connection
+		stmt = conn.prepareStatement(sql)
+		stmt.setString(1, locations.world.name)
+		stmt.setInt(2, locations.blockX)
+		stmt.setInt(3, locations.blockY)
+		stmt.setInt(4, locations.blockZ)
+		val rs = stmt.executeQuery()
+		if (rs.next()) exists = true
+	}
+	catch (e: SQLException)
+	{
+		System.err.println(e.stackTrace)
+	}
+	stmt?.close()
+	conn?.close()
+
+	return exists
+}
+
+fun DoVectorsExist(world: World, positions: Array<Vector>): IntArrayList
+{
+	val exists = IntArrayList(positions.size)
+	val sql = "SELECT room_id FROM blocks WHERE world = ? AND x = ? AND y = ? AND z = ?;"
+
+	var conn: Connection? = null
+	var stmt: PreparedStatement? = null
+	try
+	{
+		conn = DataSource.connection
+		stmt = conn.prepareStatement(sql)
+		for (i in positions.indices)
+		{
+			val v = positions[i]
+			stmt.setString(1, world.name)
+			stmt.setInt(2, v.x.toInt())
+			stmt.setInt(3, v.y.toInt())
+			stmt.setInt(4, v.z.toInt())
+			val rs = stmt.executeQuery()
+			if (rs.next()) exists.add(i)
+			rs.close()
+		}
+	}
+	catch (e: SQLException)
+	{
+		System.err.println(e.stackTrace)
+	}
+	stmt?.close()
+	conn?.close()
+
+	return exists
+}
+
+fun LoadBlock(location: Location): Int
+{
+	var roomId = -1
+	val sql = "SELECT room_id FROM blocks WHERE world = ? AND x = ? AND y = ? AND z = ?;"
+	var conn: Connection? = null
+	var stmt: PreparedStatement? = null
+	try
+	{
+		conn = DataSource.connection
+		stmt = conn.prepareStatement(sql)
+		stmt.setString(1, location.world.name)
+		stmt.setInt(2, location.blockX)
+		stmt.setInt(3, location.blockY)
+		stmt.setInt(4, location.blockZ)
+		val rs = stmt.executeQuery()
+		if (rs.next()) roomId = rs.getInt(1)
+	}
+	catch (e: SQLException)
+	{
+		System.err.println(e.stackTrace)
+	}
+	stmt?.close()
+	conn?.close()
+	return roomId
 }
 
 fun RemoveRoom(roomId: Int)
 {
-	val sql = "DELETE FROM blocks WHERE roomId=?; DELETE FROM rooms WHERE roomId=?"
-	val stmt: PreparedStatement = DataSource.connection.prepareStatement(sql)
-	stmt.setInt(1, roomId)
-	stmt.setInt(2, roomId)
-	stmt.execute()
-	stmt.close()
+	val sql = "DELETE FROM blocks WHERE room_id=?; DELETE FROM rooms WHERE room_id=?"
+	var conn: Connection? = null
+	var stmt: PreparedStatement? = null
+	try
+	{
+		conn = DataSource.connection
+		stmt = conn.prepareStatement(sql)
+		stmt.setInt(1, roomId)
+		stmt.setInt(2, roomId)
+		stmt.execute()
+	}
+	catch (e: SQLException)
+	{
+		System.err.println(e.stackTrace)
+	}
+	stmt?.close()
+	conn?.close()
 }
