@@ -36,9 +36,17 @@ dependencies {
     // 'com.j256.ormlite:ormlite-core:5.6'
 }
 
+// These are excluded because net.axay:kspigot will use spigot's libraries function to download.
+// This is not an issue unless you use shadowJar because kotlinx and kotlin will be included which causes
+// 2 versions of kotlin library to be loaded, but we need them at compile time still.
+configurations {
+    runtimeOnly.exclude group: "net.axay"
+    runtimeOnly.exclude group: "org.jetbrains.kotlin"
+}
+
 shadowJar {
     dependencies {
-        exclude(dependency("net.axay:kspigot:1.17.4")) // Uses plugin.yml 's library to automatically include
+        exclude(dependency("net.axay:kspigot"))
     }
 }
 
@@ -51,6 +59,14 @@ java {
         toolchain.languageVersion = JavaLanguageVersion.of(targetJavaVersion)
     }
 }
+
+compileKotlin {
+    kotlinOptions.jvmTarget = "16"
+}
+compileTestKotlin {
+    kotlinOptions.jvmTarget = "16"
+}
+
 
 tasks.withType(JavaCompile).configureEach {
     options.release.set(targetJavaVersion)
@@ -65,11 +81,3 @@ processResources {
         expand props
     }
 }
-
-compileKotlin {
-    kotlinOptions.jvmTarget = "16"
-}
-compileTestKotlin {
-    kotlinOptions.jvmTarget = "16"
-}
-

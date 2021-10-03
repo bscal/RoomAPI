@@ -1,9 +1,7 @@
 package me.bscal.roomapi
 
 import com.destroystokyo.paper.event.block.BlockDestroyEvent
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
@@ -16,7 +14,7 @@ import org.bukkit.event.entity.EntityChangeBlockEvent
 import org.bukkit.event.entity.EntityExplodeEvent
 import java.util.logging.Level
 
-class RoomListeners : Listener
+internal class RoomListeners : Listener
 {
 	@EventHandler(priority = EventPriority.MONITOR)
 	fun OnBlockDestroy(event: BlockDestroyEvent)
@@ -66,10 +64,10 @@ class RoomListeners : Listener
 
 	private fun CheckForBrokenRoom(eventName: String, location: Location)
 	{
-		if (RoomAPI.DEBUG) RoomAPI.Log(Level.INFO, "Checking block $location from $eventName")
-
-		CoroutineScope(Dispatchers.Default).launch {
-			RoomAPI.Log(Level.INFO, "4 I'm working in thread ${Thread.currentThread().name}")
+		if (RoomApiPlugin.DEBUG) RoomApiPlugin.Log(Level.INFO, "Checking block $location from $eventName")
+		Bukkit.getScheduler().runTaskAsynchronously(RoomApiPlugin.INSTANCE, Runnable {
+			val start = System.nanoTime()
+			RoomApiPlugin.Log(Level.INFO, "4 I'm working in thread ${Thread.currentThread().name}")
 			val world = location.world
 			val vec = location.toVector()
 			val vecArray = arrayOf(vec, vec.clone().add(UP), vec.clone().add(DOWN), vec.clone().add(NORTH), vec.clone().add(SOUTH),
@@ -78,19 +76,22 @@ class RoomListeners : Listener
 			val indecencies = DoVectorsExist(world, vecArray)
 			if (indecencies.isEmpty)
 			{
-				RoomAPI.Log(Level.INFO, "No indecencies found")
-				return@launch
+				val end = System.nanoTime() - start
+				RoomApiPlugin.Log(Level.INFO, "No indecencies found. Took: ${end}ns (${end/1000000}ms)")
+				return@Runnable
 			}
 
 			for (i: Int in indecencies.elements())
 			{
-				val roomId = LoadBlock(Location(world, vecArray[i].x, vecArray[i].y, vecArray[i].z));
+				val roomId = FetchRoomId(Location(world, vecArray[i].x, vecArray[i].y, vecArray[i].z));
 				if (roomId > -1)
 				{
 					RemoveRoom(roomId)
-					RoomAPI.Log(Level.INFO, "Removing room $roomId")
+					RoomApiPlugin.Log(Level.INFO, "Removing room $roomId")
 				}
 			}
-		}
+			val end = System.nanoTime() - start
+			RoomApiPlugin.Log(Level.INFO, "Took: ${end}ns (${end/1000000}ms)")
+		})
 	}
 }

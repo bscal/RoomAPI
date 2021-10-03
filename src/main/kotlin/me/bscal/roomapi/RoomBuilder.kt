@@ -13,44 +13,44 @@ import java.util.logging.Level
 
 private const val Distance = 16 * 16
 
-val NORTH = Vector(1, 0, 0)
-val SOUTH = Vector(-1, 0, 0)
-val UP = Vector(0, 1, 0)
-val DOWN = Vector(0, -1, 0)
-val EAST = Vector(0, 0, 1)
-val WEST = Vector(0, 0, -1)
+internal val NORTH = Vector(1, 0, 0)
+internal val SOUTH = Vector(-1, 0, 0)
+internal val UP = Vector(0, 1, 0)
+internal val DOWN = Vector(0, -1, 0)
+internal val EAST = Vector(0, 0, 1)
+internal val WEST = Vector(0, 0, -1)
 
 @JvmRecord data class FloodFillReturnData(val isRoom: Boolean, val blocksProcessed: Int, val blocks: ObjectArrayList<Location>)
 
-fun TestWallConnects(player: Player)
+@Deprecated("Use CreateRoom() instead.")
+internal fun TestWallConnects(player: Player)
 {
 	val scope = CoroutineScope(Dispatchers.Default)
 	val job = scope.launch {
 		val scopedLocation = player.location.clone()
 		if (DoesLocationExist(scopedLocation))
 		{
-			RoomAPI.Log(Level.WARNING, "This room seems to already exist!")
+			RoomApiPlugin.Log(Level.WARNING, "This room seems to already exist!")
 			return@launch
 		}
 		val started = System.nanoTime()
-		val fillReturnData: FloodFillReturnData = FillVector(scopedLocation)
+		val fillReturnData: FloodFillReturnData = FloodFill(scopedLocation)
 		if (fillReturnData.isRoom)
 		{
-			val roomId = CreateRoom(scopedLocation.world, player.uniqueId)
-			CreateBlockBatch(roomId, fillReturnData.blocks)
-			RoomAPI.Log(Level.INFO, "RoomId=$roomId")
+			val roomId = InsertRoom(scopedLocation.world, player.uniqueId)
+			InsertBlockBatch(roomId, fillReturnData.blocks)
+			RoomApiPlugin.Log(Level.INFO, "RoomId=$roomId")
 		}
 
 		val diff = System.nanoTime() - started
-		RoomAPI.Log(Level.INFO,
+		RoomApiPlugin.Log(Level.INFO,
 			"FloodFill took: ${diff}ns (${diff / 1000000}ms), Processed ${fillReturnData.blocksProcessed} blocks. Is Room: ${fillReturnData.isRoom}")
-
 	}
 }
 
 private fun AddVecsToNew(src: Vector, add: Vector): Vector = Vector(src.x + add.x, src.y + add.y, src.z + add.z)
 
-private fun FillVector(location: Location): FloodFillReturnData
+fun FloodFill(location: Location): FloodFillReturnData
 {
 	val origin: Vector = location.toVector()
 	val visited: ObjectOpenHashSet<Vector> = ObjectOpenHashSet()
@@ -66,7 +66,12 @@ private fun FillVector(location: Location): FloodFillReturnData
 		location.set(vec.x, vec.y, vec.z)
 		visited.add(vec)
 		counter++
-		if (origin.distanceSquared(vec) > Distance)
+		if (!location.isWorldLoaded || !location.isChunkLoaded)
+		{
+			System.err.println("Location's world: ${location.world} or chunk: ${location.chunk} is not loaded. Canceling FloodFill")
+			return FloodFillReturnData(false, counter, ObjectArrayList<Location>(1))
+		}
+		else if (origin.distanceSquared(vec) > Distance)
 		{
 			isRoom = false
 			continue

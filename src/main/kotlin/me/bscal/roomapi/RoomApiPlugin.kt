@@ -6,14 +6,14 @@ import net.axay.kspigot.extensions.pluginManager
 import net.axay.kspigot.main.KSpigot
 import java.util.logging.Level
 
-class RoomAPI : KSpigot()
+class RoomApiPlugin : KSpigot()
 {
 	companion object
 	{
-		lateinit var INSTANCE: RoomAPI; private set
-		var DEBUG: Boolean = false
+		lateinit var INSTANCE: RoomApiPlugin; private set
+		var DEBUG: Boolean = false; private set
 
-		fun Log(level: Level, msg: String)
+		internal fun Log(level: Level, msg: String)
 		{
 			if (DEBUG) INSTANCE.logger.log(level, msg)
 		}
@@ -33,10 +33,9 @@ class RoomAPI : KSpigot()
 
 		pluginManager.registerEvents(RoomListeners(), this)
 
-		command("floodfill") {
+		command("createroom") {
 			runs {
-				TestWallConnects(player)
-				logger.info("out")
+				RoomApi.CreateRoom(player)
 			}
 		}
 	}

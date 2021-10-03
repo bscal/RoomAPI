@@ -9,7 +9,12 @@ import java.util.*
 
 class Room(val RoomId: Int, val World: World, val Owner: UUID)
 {
-	lateinit var BlockPos: ObjectArrayList<Vector>
+	constructor(roomId: Int, world: World, owner: UUID, blockLocations: ObjectArrayList<Location>) : this(roomId, world, owner)
+	{
+		this.BlockLocations = blockLocations
+	}
+
+	lateinit var BlockLocations: ObjectArrayList<Location>
 
 	fun AsLocation(vector: Vector): Location = Location(World, vector.x, vector.y, vector.z)
 

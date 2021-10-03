@@ -4,6 +4,7 @@ import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import it.unimi.dsi.fastutil.ints.IntArrayList
 import it.unimi.dsi.fastutil.objects.ObjectArrayList
+import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.World
 import org.bukkit.util.Vector
@@ -11,13 +12,13 @@ import java.sql.Connection
 import java.sql.PreparedStatement
 import java.sql.SQLException
 import java.sql.Statement
-import java.util.*
+import java.util.UUID
 
 private val Config: HikariConfig = HikariConfig()
 
-val DataSource: HikariDataSource by lazy {
+internal val DataSource: HikariDataSource by lazy {
 	Class.forName("org.h2.Driver")
-	Config.jdbcUrl = "jdbc:h2:${RoomAPI.INSTANCE.dataFolder.absolutePath}\\roomapi"
+	Config.jdbcUrl = "jdbc:h2:${RoomApiPlugin.INSTANCE.dataFolder.absolutePath}\\roomapi"
 	Config.maximumPoolSize = 10
 	Config.connectionTimeout = 60000
 	Config.leakDetectionThreshold = 60000
@@ -81,7 +82,7 @@ fun CreateTables()
 	conn2?.close()
 }
 
-fun CreateRoom(world: World, owner: UUID): Int
+fun InsertRoom(world: World, owner: UUID): Int
 {
 	var id = -1
 	val sql = "INSERT INTO rooms (world, owner) values (?,?)"
@@ -90,10 +91,10 @@ fun CreateRoom(world: World, owner: UUID): Int
 	try
 	{
 		conn = DataSource.connection
-		stmt = conn.prepareStatement(sql)
+		stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)
 		stmt.setString(1, world.name)
 		stmt.setString(2, owner.toString())
-		stmt.executeUpdate()
+		stmt.execute()
 		val rs = stmt.generatedKeys
 		if (rs.next()) id = rs.getInt(1)
 	}
@@ -106,8 +107,9 @@ fun CreateRoom(world: World, owner: UUID): Int
 	return id
 }
 
-fun LoadRoom(room: Room)
+fun FetchRoom(roomId: Int): Room?
 {
+	var room: Room? = null
 	val sql = "SELECT * FROM rooms WHERE id=?"
 	var conn: Connection? = null
 	var stmt: PreparedStatement? = null
@@ -115,21 +117,46 @@ fun LoadRoom(room: Room)
 	{
 		conn = DataSource.connection
 		stmt = conn.prepareStatement(sql)
-		stmt.setInt(1, room.RoomId)
+		stmt.setInt(1, roomId)
+
 		val rs = stmt.executeQuery()
 		if (rs.next())
-		{			//TODO
+		{
+			val worldStr = rs.getString("world")
+			val uuidStr = rs.getString("owner")
+			if (worldStr.isNullOrBlank() || uuidStr.isNullOrBlank()) return null
+			if (!RoomApiPlugin.INSTANCE.isEnabled)
+			{
+				System.err.println("Plugin is not enabled")
+				return null
+			}
+			val world: World = Bukkit.getWorld(worldStr) ?: return null
+			room = Room(roomId, world, UUID.fromString(uuidStr), ObjectArrayList<Location>())
+			stmt.close()
+
+			val sqlForBlocks = "SELECT x, y, z FROM blocks WHERE room_id=?"
+			stmt = conn.prepareStatement(sqlForBlocks)
+			stmt.setInt(1, roomId)
+			val rsForBlocks = stmt.executeQuery()
+			while (rsForBlocks.next())
+			{
+				room.BlockLocations.add(Location(world, rs.getInt(1).toDouble(), rs.getInt(2).toDouble(), rs.getInt(3).toDouble()))
+			}
 		}
 	}
-	catch (e: SQLException)
+	catch (e: Exception)
 	{
 		System.err.println(e.stackTrace)
 	}
-	stmt?.close()
-	conn?.close()
+	finally
+	{
+		stmt?.close()
+		conn?.close()
+	}
+	return room
 }
 
-fun CreateBlock(roomId: Int, location: Location)
+fun InsertBlock(roomId: Int, location: Location)
 {
 	val sql = "INSERT INTO blocks (world, x, y, z, room_id) values (?, ?, ?, ?, ?)"
 	var conn: Connection? = null
@@ -153,7 +180,7 @@ fun CreateBlock(roomId: Int, location: Location)
 	conn?.close()
 }
 
-fun CreateBlockBatch(roomId: Int, locations: ObjectArrayList<Location>)
+fun InsertBlockBatch(roomId: Int, locations: ObjectArrayList<Location>)
 {
 	val sql = "INSERT INTO blocks (world, x, y, z, room_id) values (?, ?, ?, ?, ?)"
 	var conn: Connection? = null
@@ -242,7 +269,7 @@ fun DoVectorsExist(world: World, positions: Array<Vector>): IntArrayList
 	return exists
 }
 
-fun LoadBlock(location: Location): Int
+fun FetchRoomId(location: Location): Int
 {
 	var roomId = -1
 	val sql = "SELECT room_id FROM blocks WHERE world = ? AND x = ? AND y = ? AND z = ?;"
@@ -279,7 +306,7 @@ fun RemoveRoom(roomId: Int)
 		stmt = conn.prepareStatement(sql)
 		stmt.setInt(1, roomId)
 		stmt.setInt(2, roomId)
-		stmt.execute()
+		stmt.executeUpdate()
 	}
 	catch (e: SQLException)
 	{
