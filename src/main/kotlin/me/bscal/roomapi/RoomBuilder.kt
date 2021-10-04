@@ -7,9 +7,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.bukkit.Bukkit
 import org.bukkit.Location
-import org.bukkit.Material
 import org.bukkit.entity.Player
 import org.bukkit.util.Vector
+import java.util.*
 import java.util.logging.Level
 
 internal val NORTH = Vector(1, 0, 0)
@@ -29,7 +29,7 @@ internal fun TestWallConnects(player: Player)
 		val scopedLocation = player.location.clone()
 		if (DoesLocationExist(scopedLocation))
 		{
-			RoomApiPlugin.Log(Level.WARNING, "This room seems to already exist!")
+			RoomApiPlugin.LogDebug(Level.WARNING, "This room seems to already exist!")
 			return@launch
 		}
 		val started = System.nanoTime()
@@ -38,25 +38,79 @@ internal fun TestWallConnects(player: Player)
 		{
 			val roomId = InsertRoom(scopedLocation.world, player.uniqueId)
 			InsertBlockBatch(roomId, scopedLocation.world.name, fillReturnData.blocks)
-			RoomApiPlugin.Log(Level.INFO, "RoomId=$roomId")
+			RoomApiPlugin.LogDebug(Level.INFO, "RoomId=$roomId")
 		}
 
 		val diff = System.nanoTime() - started
-		RoomApiPlugin.Log(Level.INFO,
+		RoomApiPlugin.LogDebug(Level.INFO,
 			"FloodFill took: ${diff}ns (${diff / 1000000}ms), Processed ${fillReturnData.blocksProcessed} blocks. Is Room: ${fillReturnData.isRoom}")
 	}
 }
 
 private fun AddVecsToNew(src: Vector, add: Vector): Vector = Vector(src.x + add.x, src.y + add.y, src.z + add.z)
 
-fun TestRoom(worldName: String, origin: Vector) : Boolean
+fun FindBlocks(worldName: String, origin: Vector): ObjectArrayList<Vector>
+{
+	val world = Bukkit.getWorld(worldName) ?: return ObjectArrayList(0)
+	val location = Location(world, origin.x, origin.y, origin.z)
+	val blocks = ObjectArrayList<Vector>(0)
+	val visited: ObjectOpenHashSet<Vector> = ObjectOpenHashSet()
+	val stack: ObjectArrayList<Vector> = ObjectArrayList()
+	stack.push(origin)
+	while (!stack.isEmpty)
+	{
+		val vec = stack.pop()
+		location.set(vec.x, vec.y, vec.z)
+		visited.add(vec)
+		if (!location.isWorldLoaded || !location.isChunkLoaded)
+		{
+			System.err.println("Location's world: ${location.world} or chunk: ${location.chunk} is not loaded. Canceling FloodFill")
+			return ObjectArrayList(0)
+		}
+		if (origin.distanceSquared(vec) > RoomApiPlugin.MAX_SEARCH_DISTANCE) return ObjectArrayList(0)
+
+		blocks.add(vec)
+
+		val v0 = AddVecsToNew(vec, NORTH)
+		if (!visited.contains(v0) && RoomBlocks.IsExcludedOrAir(
+				location.world.getBlockAt(v0.blockX, v0.blockY, v0.blockZ).type)
+		) stack.push(v0)
+
+		val v1 = AddVecsToNew(vec, SOUTH)
+		if (!visited.contains(v1) && RoomBlocks.IsExcludedOrAir(
+				location.world.getBlockAt(v1.blockX, v1.blockY, v1.blockZ).type)
+		) stack.push(v1)
+
+		val v2 = AddVecsToNew(vec, EAST)
+		if (!visited.contains(v2) && RoomBlocks.IsExcludedOrAir(
+				location.world.getBlockAt(v2.blockX, v2.blockY, v2.blockZ).type)
+		) stack.push(v2)
+
+		val v3 = AddVecsToNew(vec, WEST)
+		if (!visited.contains(v3) && RoomBlocks.IsExcludedOrAir(
+				location.world.getBlockAt(v3.blockX, v3.blockY, v3.blockZ).type)
+		) stack.push(v3)
+
+		val v4 = AddVecsToNew(vec, UP)
+		if (!visited.contains(v4) && RoomBlocks.IsExcludedOrAir(
+				location.world.getBlockAt(v4.blockX, v4.blockY, v4.blockZ).type)
+		) stack.push(v4)
+
+		val v5 = AddVecsToNew(vec, DOWN)
+		if (!visited.contains(v5) && RoomBlocks.IsExcludedOrAir(
+				location.world.getBlockAt(v5.blockX, v5.blockY, v5.blockZ).type)
+		) stack.push(v5)
+	}
+	return blocks
+}
+
+fun TestRoom(worldName: String, origin: Vector): Boolean
 {
 	val world = Bukkit.getWorld(worldName) ?: return false
 	val location = Location(world, origin.x, origin.y, origin.z)
 	val visited: ObjectOpenHashSet<Vector> = ObjectOpenHashSet()
 	val stack: ObjectArrayList<Vector> = ObjectArrayList()
-
-	if (!visited.contains(origin)) stack.push(origin)
+	stack.push(origin)
 	while (!stack.isEmpty)
 	{
 		val vec = stack.pop()
@@ -67,28 +121,37 @@ fun TestRoom(worldName: String, origin: Vector) : Boolean
 			System.err.println("Location's world: ${location.world} or chunk: ${location.chunk} is not loaded. Canceling FloodFill")
 			return false
 		}
-		else if (origin.distanceSquared(vec) > RoomApiPlugin.MAX_SEARCH_DISTANCE)
-			return false
-		else if (!location.block.type.isAir) // Do logic here
-			continue
+		if (origin.distanceSquared(vec) > RoomApiPlugin.MAX_SEARCH_DISTANCE) return false
 
 		val v0 = AddVecsToNew(vec, NORTH)
-		if (!visited.contains(v0)) stack.push(v0)
+		if (!visited.contains(v0) && RoomBlocks.IsExcludedOrAir(
+				location.world.getBlockAt(v0.blockX, v0.blockY, v0.blockZ).type)
+		) stack.push(v0)
 
 		val v1 = AddVecsToNew(vec, SOUTH)
-		if (!visited.contains(v1)) stack.push(v1)
+		if (!visited.contains(v1) && RoomBlocks.IsExcludedOrAir(
+				location.world.getBlockAt(v1.blockX, v1.blockY, v1.blockZ).type)
+		) stack.push(v1)
 
 		val v2 = AddVecsToNew(vec, EAST)
-		if (!visited.contains(v2)) stack.push(v2)
+		if (!visited.contains(v2) && RoomBlocks.IsExcludedOrAir(
+				location.world.getBlockAt(v2.blockX, v2.blockY, v2.blockZ).type)
+		) stack.push(v2)
 
 		val v3 = AddVecsToNew(vec, WEST)
-		if (!visited.contains(v3)) stack.push(v3)
+		if (!visited.contains(v3) && RoomBlocks.IsExcludedOrAir(
+				location.world.getBlockAt(v3.blockX, v3.blockY, v3.blockZ).type)
+		) stack.push(v3)
 
 		val v4 = AddVecsToNew(vec, UP)
-		if (!visited.contains(v4)) stack.push(v4)
+		if (!visited.contains(v4) && RoomBlocks.IsExcludedOrAir(
+				location.world.getBlockAt(v4.blockX, v4.blockY, v4.blockZ).type)
+		) stack.push(v4)
 
 		val v5 = AddVecsToNew(vec, DOWN)
-		if (!visited.contains(v5)) stack.push(v5)
+		if (!visited.contains(v5) && RoomBlocks.IsExcludedOrAir(
+				location.world.getBlockAt(v5.blockX, v5.blockY, v5.blockZ).type)
+		) stack.push(v5)
 	}
 	return true
 }
@@ -119,7 +182,7 @@ fun FloodFill(location: Location): FloodFillReturnData
 			isRoom = false
 			continue
 		}
-		else if (location.block.type == Material.AIR) // Do logic here
+		else if (RoomBlocks.IsExcludedOrAir(location.block.type)) // Do logic here
 			roomBlocks.add(location.toVector())
 		else continue
 

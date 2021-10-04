@@ -8,7 +8,7 @@ import org.bukkit.World
 import org.bukkit.entity.Player
 import org.bukkit.util.Consumer
 import org.bukkit.util.Vector
-import java.util.UUID
+import java.util.*
 import java.util.logging.Level
 
 class RoomApi
@@ -24,7 +24,7 @@ class RoomApi
 			async task@{
 				if (DoesLocationExist(locationCopy))
 				{
-					RoomApiPlugin.Log(Level.WARNING, "This room seems to already exist!")
+					RoomApiPlugin.LogDebug(Level.WARNING, "This room seems to already exist!")
 					return@task
 				}
 				val started = System.nanoTime()
@@ -33,8 +33,7 @@ class RoomApi
 				{
 					val roomId = InsertRoom(locationCopy.world, owner)
 					InsertBlockBatch(roomId, locationCopy.world.name, fillReturnData.blocks)
-					if (RoomApiPlugin.DEBUG) RoomApiPlugin.Log(Level.INFO,
-						"Room($roomId) created with ${fillReturnData.blocks.size} blocks!")
+					RoomApiPlugin.LogDebug(Level.INFO, "Room($roomId) created with ${fillReturnData.blocks.size} blocks!")
 					if (cb != null)
 					{
 						sync {                // I'm pretty sure this is safe? the blocks list is not modified again
@@ -43,7 +42,7 @@ class RoomApi
 					}
 				}
 				val diff = System.nanoTime() - started
-				if (RoomApiPlugin.DEBUG) RoomApiPlugin.Log(Level.INFO,
+				RoomApiPlugin.LogDebug(Level.INFO,
 					"FloodFill took: ${diff}ns (${diff / 1000000}ms), Processed ${fillReturnData.blocksProcessed} blocks. Is Room: ${fillReturnData.isRoom}")
 			}
 		}
@@ -63,7 +62,7 @@ class RoomApi
 			async task@{
 				if (DoesLocationExist(locationCopy))
 				{
-					RoomApiPlugin.Log(Level.WARNING, "This room seems to already exist!")
+					RoomApiPlugin.LogDebug(Level.WARNING, "This room seems to already exist!")
 					return@task
 				}
 				val fillReturnData: FloodFillReturnData = FloodFill(locationCopy)

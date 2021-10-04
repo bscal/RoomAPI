@@ -4,7 +4,6 @@ import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import it.unimi.dsi.fastutil.ints.IntArrayList
 import it.unimi.dsi.fastutil.objects.ObjectArrayList
-import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.World
 import org.bukkit.util.Vector
@@ -12,7 +11,7 @@ import java.sql.Connection
 import java.sql.PreparedStatement
 import java.sql.SQLException
 import java.sql.Statement
-import java.util.UUID
+import java.util.*
 import java.util.logging.Level
 
 private val Config: HikariConfig = HikariConfig()
@@ -105,6 +104,7 @@ fun InsertRoom(world: World, owner: UUID): Int
 	}
 	stmt?.close()
 	conn?.close()
+	RoomApiPlugin.LogDebug(Level.INFO, "Inserting room $id")
 	return id
 }
 
@@ -152,10 +152,38 @@ fun FetchRoom(roomId: Int): Room?
 		stmt?.close()
 		conn?.close()
 	}
+	RoomApiPlugin.LogDebug(Level.INFO, "Inserting room $room")
 	return room
 }
 
-fun InsertBlock(roomId: Int, location: Location)
+fun FetchBlocks(roomId: Int): ObjectArrayList<Vector>
+{
+	val blocks = ObjectArrayList<Vector>()
+	val sql = "SELECT x, y, z FROM blocks WHERE room_id=?"
+	var conn: Connection? = null
+	var stmt: PreparedStatement? = null
+	try
+	{
+		conn = DataSource.connection
+		stmt = conn.prepareStatement(sql)
+		stmt.setInt(1, roomId)
+		val rs = stmt.executeQuery()
+		while (rs.next()) blocks.add(Vector(rs.getInt(1), rs.getInt(2), rs.getInt(3)))
+	}
+	catch (e: Exception)
+	{
+		System.err.println(e.stackTrace)
+	}
+	finally
+	{
+		stmt?.close()
+		conn?.close()
+	}
+	RoomApiPlugin.LogDebug(Level.INFO, "FetchBlocks $roomId")
+	return blocks
+}
+
+fun InsertBlock(roomId: Int, worldName: String, vector: Vector)
 {
 	val sql = "INSERT INTO blocks (world, x, y, z, room_id) values (?, ?, ?, ?, ?)"
 	var conn: Connection? = null
@@ -164,12 +192,12 @@ fun InsertBlock(roomId: Int, location: Location)
 	{
 		conn = DataSource.connection
 		stmt = conn.prepareStatement(sql)
-		stmt.setString(1, location.world.name)
-		stmt.setInt(2, location.blockX)
-		stmt.setInt(3, location.blockY)
-		stmt.setInt(4, location.blockZ)
+		stmt.setString(1, worldName)
+		stmt.setInt(2, vector.blockX)
+		stmt.setInt(3, vector.blockY)
+		stmt.setInt(4, vector.blockZ)
 		stmt.setInt(5, roomId)
-		stmt.execute()
+		stmt.executeUpdate()
 	}
 	catch (e: SQLException)
 	{
@@ -177,6 +205,7 @@ fun InsertBlock(roomId: Int, location: Location)
 	}
 	stmt?.close()
 	conn?.close()
+	RoomApiPlugin.LogDebug(Level.INFO, "InsertBlock $roomId, $vector")
 }
 
 fun InsertBlockBatch(roomId: Int, worldName: String, locations: ObjectArrayList<Vector>)
@@ -205,6 +234,7 @@ fun InsertBlockBatch(roomId: Int, worldName: String, locations: ObjectArrayList<
 	}
 	stmt?.close()
 	conn?.close()
+	RoomApiPlugin.LogDebug(Level.INFO, "Inserting block batch for $roomId")
 }
 
 fun DoesLocationExist(locations: Location): Boolean
@@ -255,8 +285,7 @@ fun DoVectorsExist(world: World, positions: Array<Vector>): IntArrayList
 			if (rs.next())
 			{
 				val roomId = rs.getInt(1)
-				if (roomId > 0 && !exists.contains(roomId))
-					exists.add(roomId)
+				if (roomId > 0 && !exists.contains(roomId)) exists.add(roomId)
 			}
 		}
 	}
@@ -293,6 +322,7 @@ fun FetchRoomId(location: Location): Int
 	}
 	stmt?.close()
 	conn?.close()
+	RoomApiPlugin.LogDebug(Level.INFO, "FetchRoomId loc: $location")
 	return roomId
 }
 
@@ -315,4 +345,59 @@ fun RemoveRoom(roomId: Int)
 	}
 	stmt?.close()
 	conn?.close()
+
+	RoomApiPlugin.LogDebug(Level.INFO, "Removing room $roomId")
+}
+
+fun RemoveBlock(worldName: String, vector: Vector)
+{
+	val sql = "DELETE FROM blocks WHERE world = ? AND x = ? AND y = ? AND z = ?"
+	var conn: Connection? = null
+	var stmt: PreparedStatement? = null
+	try
+	{
+		conn = DataSource.connection
+		stmt = conn.prepareStatement(sql)
+		stmt.setString(1, worldName)
+		stmt.setInt(2, vector.blockX)
+		stmt.setInt(3, vector.blockY)
+		stmt.setInt(4, vector.blockZ)
+		stmt.executeUpdate()
+	}
+	catch (e: SQLException)
+	{
+		System.err.println(e.stackTrace)
+	}
+	stmt?.close()
+	conn?.close()
+	RoomApiPlugin.LogDebug(Level.INFO, "Removing block $vector")
+}
+
+fun UpdateBlocks(newRoomId: Int, worldName: String, positions: Array<Vector>)
+{
+	val sql = "UPDATE blocks SET room_id = ? WHERE world = ? AND x = ? AND y = ? AND z = ?"
+	var conn: Connection? = null
+	var stmt: PreparedStatement? = null
+	try
+	{
+		conn = DataSource.connection
+		stmt = conn.prepareStatement(sql)
+		for (v in positions)
+		{
+			stmt.setInt(1, newRoomId)
+			stmt.setString(2, worldName)
+			stmt.setInt(3, v.blockX)
+			stmt.setInt(4, v.blockY)
+			stmt.setInt(5, v.blockZ)
+			stmt.addBatch()
+		}
+		stmt.executeBatch()
+	}
+	catch (e: SQLException)
+	{
+		System.err.println(e.stackTrace)
+	}
+	stmt?.close()
+	conn?.close()
+	RoomApiPlugin.LogDebug(Level.INFO, "Updating to room $newRoomId")
 }
