@@ -13,6 +13,7 @@ import java.sql.PreparedStatement
 import java.sql.SQLException
 import java.sql.Statement
 import java.util.UUID
+import java.util.logging.Level
 
 private val Config: HikariConfig = HikariConfig()
 
@@ -110,7 +111,7 @@ fun InsertRoom(world: World, owner: UUID): Int
 fun FetchRoom(roomId: Int): Room?
 {
 	var room: Room? = null
-	val sql = "SELECT * FROM rooms WHERE id=?"
+	val sql = "SELECT * FROM rooms WHERE room_id=?"
 	var conn: Connection? = null
 	var stmt: PreparedStatement? = null
 	try
@@ -118,7 +119,6 @@ fun FetchRoom(roomId: Int): Room?
 		conn = DataSource.connection
 		stmt = conn.prepareStatement(sql)
 		stmt.setInt(1, roomId)
-
 		val rs = stmt.executeQuery()
 		if (rs.next())
 		{
@@ -130,8 +130,7 @@ fun FetchRoom(roomId: Int): Room?
 				System.err.println("Plugin is not enabled")
 				return null
 			}
-			val world: World = Bukkit.getWorld(worldStr) ?: return null
-			room = Room(roomId, world, UUID.fromString(uuidStr), ObjectArrayList<Location>())
+			room = Room(roomId, worldStr, UUID.fromString(uuidStr), ObjectArrayList<Vector>())
 			stmt.close()
 
 			val sqlForBlocks = "SELECT x, y, z FROM blocks WHERE room_id=?"
@@ -140,7 +139,7 @@ fun FetchRoom(roomId: Int): Room?
 			val rsForBlocks = stmt.executeQuery()
 			while (rsForBlocks.next())
 			{
-				room.BlockLocations.add(Location(world, rs.getInt(1).toDouble(), rs.getInt(2).toDouble(), rs.getInt(3).toDouble()))
+				room.BlockLocations.add(Vector(rs.getInt(1), rs.getInt(2), rs.getInt(3)))
 			}
 		}
 	}
@@ -180,7 +179,7 @@ fun InsertBlock(roomId: Int, location: Location)
 	conn?.close()
 }
 
-fun InsertBlockBatch(roomId: Int, locations: ObjectArrayList<Location>)
+fun InsertBlockBatch(roomId: Int, worldName: String, locations: ObjectArrayList<Vector>)
 {
 	val sql = "INSERT INTO blocks (world, x, y, z, room_id) values (?, ?, ?, ?, ?)"
 	var conn: Connection? = null
@@ -189,12 +188,12 @@ fun InsertBlockBatch(roomId: Int, locations: ObjectArrayList<Location>)
 	{
 		conn = DataSource.connection
 		stmt = conn.prepareStatement(sql)
-		for (loc: Location in locations)
+		for (vec: Vector in locations)
 		{
-			stmt.setString(1, loc.world.name)
-			stmt.setInt(2, loc.blockX)
-			stmt.setInt(3, loc.blockY)
-			stmt.setInt(4, loc.blockZ)
+			stmt.setString(1, worldName)
+			stmt.setInt(2, vec.blockX)
+			stmt.setInt(3, vec.blockY)
+			stmt.setInt(4, vec.blockZ)
 			stmt.setInt(5, roomId)
 			stmt.addBatch()
 		}
@@ -238,25 +237,27 @@ fun DoesLocationExist(locations: Location): Boolean
 
 fun DoVectorsExist(world: World, positions: Array<Vector>): IntArrayList
 {
-	val exists = IntArrayList(positions.size)
+	val exists = IntArrayList()
 	val sql = "SELECT room_id FROM blocks WHERE world = ? AND x = ? AND y = ? AND z = ?;"
-
 	var conn: Connection? = null
 	var stmt: PreparedStatement? = null
 	try
 	{
 		conn = DataSource.connection
 		stmt = conn.prepareStatement(sql)
-		for (i in positions.indices)
+		for (v in positions)
 		{
-			val v = positions[i]
 			stmt.setString(1, world.name)
 			stmt.setInt(2, v.x.toInt())
 			stmt.setInt(3, v.y.toInt())
 			stmt.setInt(4, v.z.toInt())
 			val rs = stmt.executeQuery()
-			if (rs.next()) exists.add(i)
-			rs.close()
+			if (rs.next())
+			{
+				val roomId = rs.getInt(1)
+				if (roomId > 0 && !exists.contains(roomId))
+					exists.add(roomId)
+			}
 		}
 	}
 	catch (e: SQLException)

@@ -7,6 +7,7 @@ import org.bukkit.Location
 import org.bukkit.World
 import org.bukkit.entity.Player
 import org.bukkit.util.Consumer
+import org.bukkit.util.Vector
 import java.util.UUID
 import java.util.logging.Level
 
@@ -31,13 +32,13 @@ class RoomApi
 				if (fillReturnData.isRoom)
 				{
 					val roomId = InsertRoom(locationCopy.world, owner)
-					InsertBlockBatch(roomId, fillReturnData.blocks)
+					InsertBlockBatch(roomId, locationCopy.world.name, fillReturnData.blocks)
 					if (RoomApiPlugin.DEBUG) RoomApiPlugin.Log(Level.INFO,
 						"Room($roomId) created with ${fillReturnData.blocks.size} blocks!")
 					if (cb != null)
 					{
 						sync {                // I'm pretty sure this is safe? the blocks list is not modified again
-							cb.accept(Room(roomId, locationCopy.world, owner, fillReturnData.blocks))
+							cb.accept(Room(roomId, locationCopy.world.name, owner, fillReturnData.blocks))
 						}
 					}
 				}
@@ -47,16 +48,16 @@ class RoomApi
 			}
 		}
 
-		fun CreateRoom(player: Player, world: World, blocks: ObjectArrayList<Location>)
+		fun CreateRoom(player: Player, world: World, blocks: ObjectArrayList<Vector>)
 		{
 			async {
 				val roomId = InsertRoom(world, player.uniqueId)
-				InsertBlockBatch(roomId, blocks)
+				InsertBlockBatch(roomId, world.name, blocks)
 			}
 
 		}
 
-		fun IsRoom(location: Location, cb: Consumer<ObjectArrayList<Location>>?)
+		fun IsRoom(location: Location, cb: Consumer<ObjectArrayList<Vector>>?)
 		{
 			val locationCopy = location.clone()
 			async task@{

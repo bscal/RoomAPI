@@ -1,6 +1,9 @@
 name: Roomapi
 version: '${version}'
 main: me.bscal.roomapi.RoomApiPlugin
+description: "A plugin for detecting and managing rooms"
+author: bscal
+website: https://github.com/bscal/RoomAPI
 api-version: 1.17
 libraries:
   - "net.axay:kspigot:1.17.4"
