@@ -4,6 +4,7 @@ import me.bscal.roomapi.RoomBlocks.LoadExcludedBlocksFromConfig
 import net.axay.kspigot.commands.command
 import net.axay.kspigot.commands.runs
 import net.axay.kspigot.extensions.pluginManager
+import net.axay.kspigot.gui.GUIType
 import net.axay.kspigot.main.KSpigot
 import java.util.*
 import java.util.logging.Level
@@ -23,7 +24,7 @@ class RoomApiPlugin : KSpigot()
 
 		internal fun Log(level: Level, msg: String)
 		{
-			if (DEBUG_MODE.Value.and(3) == 0) INSTANCE.logger.log(level, msg)
+			if (DEBUG_MODE == DebugMode.DEBUG || DEBUG_MODE == DebugMode.RELEASE) INSTANCE.logger.log(level, msg)
 		}
 	}
 
@@ -39,6 +40,8 @@ class RoomApiPlugin : KSpigot()
 		MAX_SEARCH_DISTANCE = config.getInt("max_search_distance")
 		MAX_SEARCH_DISTANCE *= MAX_SEARCH_DISTANCE // This is because the search function does not use the sqrt distance function
 		LoadExcludedBlocksFromConfig(config)
+
+		GUIType.FIVE_BY_NINE
 
 		CreateTables()
 

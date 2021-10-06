@@ -82,7 +82,7 @@ fun CreateTables()
 	conn2?.close()
 }
 
-fun InsertRoom(world: World, owner: UUID): Int
+fun InsertRoom(worldName: String, owner: UUID): Int
 {
 	var id = -1
 	val sql = "INSERT INTO rooms (world, owner) values (?,?)"
@@ -92,7 +92,7 @@ fun InsertRoom(world: World, owner: UUID): Int
 	{
 		conn = DataSource.connection
 		stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)
-		stmt.setString(1, world.name)
+		stmt.setString(1, worldName)
 		stmt.setString(2, owner.toString())
 		stmt.execute()
 		val rs = stmt.generatedKeys
@@ -299,7 +299,9 @@ fun DoVectorsExist(world: World, positions: Array<Vector>): IntArrayList
 	return exists
 }
 
-fun FetchRoomId(location: Location): Int
+fun FetchRoomId(location: Location): Int = FetchRoomId(location.world.name, location.toVector())
+
+fun FetchRoomId(worldName: String, position: Vector): Int
 {
 	var roomId = -1
 	val sql = "SELECT room_id FROM blocks WHERE world = ? AND x = ? AND y = ? AND z = ?;"
@@ -309,10 +311,10 @@ fun FetchRoomId(location: Location): Int
 	{
 		conn = DataSource.connection
 		stmt = conn.prepareStatement(sql)
-		stmt.setString(1, location.world.name)
-		stmt.setInt(2, location.blockX)
-		stmt.setInt(3, location.blockY)
-		stmt.setInt(4, location.blockZ)
+		stmt.setString(1, worldName)
+		stmt.setInt(2, position.blockX)
+		stmt.setInt(3, position.blockY)
+		stmt.setInt(4, position.blockZ)
 		val rs = stmt.executeQuery()
 		if (rs.next()) roomId = rs.getInt(1)
 	}
@@ -322,7 +324,7 @@ fun FetchRoomId(location: Location): Int
 	}
 	stmt?.close()
 	conn?.close()
-	RoomApiPlugin.LogDebug(Level.INFO, "FetchRoomId loc: $location")
+	RoomApiPlugin.LogDebug(Level.INFO, "FetchRoomId loc: $position")
 	return roomId
 }
 
